@@ -59,14 +59,18 @@ const Tfr: React.FC = () => {
   };
 
   const getFundLiquidation = (netGain: number, annualContribution = 0) => {
-    let tfr = 0;
+    let capital = 0;
+    let contributionToBeTaxed = 0;
 
     for (let y = 1; y <= years; y++) {
-      tfr = applyGain(tfr, netGain);
-      tfr += annualTfrContribution + annualContribution;
+      capital = applyGain(capital, netGain);
+
+      contributionToBeTaxed += annualTfrContribution + Math.min(annualContribution, MAX_DEDUCTIBLE);
+
+      capital += annualTfrContribution + annualContribution;
     }
 
-    return applyTax(tfr, getFundTax(years));
+    return applyTax(contributionToBeTaxed, getFundTax(years)) + (capital - contributionToBeTaxed);
   };
 
   const getFpnGain = () => {
@@ -349,7 +353,7 @@ const Tfr: React.FC = () => {
               <th>Contributo volontario annuo</th>
               <th>Contributo DdL annuo</th>
               <th>Rendimento netto annuo</th>
-              <th>Tasse liquidazione</th>
+              <th>Tasse su TFR e contributi dedotti alla liquidazione</th>
               <th>Montante netto</th>
               <th>Risparmio IRPEF</th>
               <th>Totale netto</th>
