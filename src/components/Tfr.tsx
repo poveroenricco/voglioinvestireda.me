@@ -15,7 +15,7 @@ const Tfr: React.FC = () => {
   const [years, setYears] = useState<number>(35);
   const [pacApr, setPacApr] = useState<number>(6);
 
-  const INPS_REEVAL_TAX = 0.017;
+  const INPS_REEVAL_TAX = 0.17;
   const INPS_GROSS_REEVAL = 0.015 + 0.75 * (inflation / 100);
   const INPS_NET_REEVAL = applyTax(INPS_GROSS_REEVAL, INPS_REEVAL_TAX);
 
@@ -24,7 +24,7 @@ const Tfr: React.FC = () => {
   const PIP_COST = 0.022625;
 
   const PAC_TAX = 0.26;
-  const PAC_COST = 0.002;
+  const PAC_COST = 0.004;
 
   const annualTfrContribution = ral / 13.5;
   const totalTfrContribution = annualTfrContribution * years;
