@@ -563,7 +563,7 @@ const Tfr: React.FC = () => {
               <td>
                 {formatCurrency(
                   getFundLiquidation(
-                    FPN_COST,
+                    FPN_NET_GAIN,
                     Math.min(annualVoluntaryContribution + annualDdlContribution, MAX_DEDUCTIBLE)
                   )
                 )}
