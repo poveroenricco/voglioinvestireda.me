@@ -23,10 +23,17 @@ const Tfr: React.FC = () => {
   const FPA_COST = 0.014525;
   const PIP_COST = 0.022625;
 
+  const FPN_NET_GAIN = applyTax(apr / 100 - FPN_COST, 0.2);
+  const FPA_NET_GAIN = applyTax(apr / 100 - FPA_COST, 0.2);
+  const PIP_NET_GAIN = applyTax(apr / 100 - PIP_COST, 0.2);
+
   const PAC_TAX = 0.26;
   const PAC_COST = 0.004;
+  const PAC_GAIN = pacApr / 100 - PAC_COST;
 
-  const annualTfrContribution = ral / 13.5;
+  const RAL_TFR = 0.0691;
+
+  const annualTfrContribution = ral * RAL_TFR;
   const totalTfrContribution = annualTfrContribution * years;
 
   const voluntaryContribution = monthlyVoluntaryContribution > 0;
@@ -35,10 +42,8 @@ const Tfr: React.FC = () => {
 
   const annualMinVoluntaryContribution = (minVoluntaryContribution / 100) * ral;
   const minVoluntaryContributionAmount = ((minVoluntaryContribution / 100) * ral) / 12;
-  const totalMinVoluntaryContribution = annualMinVoluntaryContribution * years;
 
   const annualDdlContribution = voluntaryContribution ? (ddlContribution / 100) * ral : 0;
-  const totalDdlContribution = annualDdlContribution * years;
 
   const annualMinContribution = voluntaryContribution ? annualMinVoluntaryContribution + annualDdlContribution : 0;
 
@@ -53,9 +58,7 @@ const Tfr: React.FC = () => {
     return applyTax(tfr, getAvgTaxRate(ral));
   };
 
-  const getFundLiquidation = (cost: number, annualContribution = 0) => {
-    const gainPercent = apr / 100;
-    const netGain = applyTax(gainPercent - cost, 0.2);
+  const getFundLiquidation = (netGain: number, annualContribution = 0) => {
     let tfr = 0;
 
     for (let y = 1; y <= years; y++) {
@@ -67,33 +70,35 @@ const Tfr: React.FC = () => {
   };
 
   const getFpnGain = () => {
-    const tfr =
-      totalTfrContribution +
-      totalVoluntaryContribution -
-      getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution);
-    const fund = getFundLiquidation(FPN_COST, annualVoluntaryContribution + annualDdlContribution);
-    return getGain(tfr, fund, years);
+    const contribution = totalTfrContribution + totalVoluntaryContribution;
+    const final =
+      getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) +
+      getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution, years);
+    return getGain(contribution, final, years);
   };
 
   const getFpaGain = () => {
-    const tfr = totalTfrContribution + totalVoluntaryContribution - getFundTaxSaving(ral, annualVoluntaryContribution);
-    const fund = getFundLiquidation(FPA_COST, annualVoluntaryContribution);
-    return getGain(tfr, fund, years);
+    const contribution = totalTfrContribution + totalVoluntaryContribution;
+    const final =
+      getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) +
+      getFundTaxSaving(ral, annualVoluntaryContribution, years);
+    return getGain(contribution, final, years);
   };
 
   const getPipGain = () => {
-    const tfr = totalTfrContribution + totalVoluntaryContribution - getFundTaxSaving(ral, annualVoluntaryContribution);
-    const fund = getFundLiquidation(PIP_COST, annualVoluntaryContribution);
-    return getGain(tfr, fund, years);
+    const contribution = totalTfrContribution + totalVoluntaryContribution;
+    const final =
+      getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution) +
+      getFundTaxSaving(ral, annualVoluntaryContribution, years);
+    return getGain(contribution, final, years);
   };
 
   const getPacLiquidation = (annualContribution: number) => {
-    const gainPercent = pacApr / 100;
     let totalContribution = 0;
     let pac = 0;
 
     for (let y = 1; y <= years; y++) {
-      pac = applyGain(pac, gainPercent - PAC_COST);
+      pac = applyGain(pac, PAC_GAIN);
       totalContribution += annualContribution;
       pac += annualContribution;
     }
@@ -103,31 +108,31 @@ const Tfr: React.FC = () => {
 
   const fpnAndPacLiquidation =
     getPacLiquidation(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution)) +
-    getFundLiquidation(FPN_COST, annualVoluntaryContribution + annualDdlContribution);
+    getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution);
 
   const fpnMaxAndPacLiquidation =
     getPacLiquidation(
       getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution) +
         Math.max(annualVoluntaryContribution - (MAX_DEDUCTIBLE - annualDdlContribution), 0)
-    ) + getFundLiquidation(FPN_COST, Math.min(annualVoluntaryContribution + annualDdlContribution, MAX_DEDUCTIBLE));
+    ) + getFundLiquidation(FPN_NET_GAIN, Math.min(annualVoluntaryContribution + annualDdlContribution, MAX_DEDUCTIBLE));
 
   const fpnMinAndPacLiquidation =
     getPacLiquidation(
       getFundTaxSaving(ral, annualMinContribution) +
         Math.max(annualVoluntaryContribution - annualMinVoluntaryContribution, 0)
-    ) + getFundLiquidation(FPN_COST, annualMinContribution);
+    ) + getFundLiquidation(FPN_NET_GAIN, annualMinContribution);
 
-  const fpnZeroAndPacLiquidation = getPacLiquidation(annualVoluntaryContribution) + getFundLiquidation(FPN_COST);
+  const fpnZeroAndPacLiquidation = getPacLiquidation(annualVoluntaryContribution) + getFundLiquidation(FPN_NET_GAIN);
 
   return (
     <div>
       <h2>Sai dove finisce il tuo TFR?</h2>
       <p>
         Il TFR (Trattamento di Fine Rapporto) è una somma che il datore di lavoro (DdL) accantona ogni anno per il
-        dipendente, come una sorta di "liquidazione" o risparmio forzato. Coincide a circa 1/13,5 della RAL
-        (Retribuzione Annua Lorda). Può restare in azienda (o essere versato all'INPS se l'azienda ha più di 50
-        dipendenti) ed essere liquidato al termine del rapporto di lavoro, oppure essere destinato a un fondo pensione
-        per integrare la pensione futura.
+        dipendente, come una sorta di "liquidazione" o risparmio forzato. Coincide a circa il{" "}
+        {formatPercentage(RAL_TFR)} della RAL (Retribuzione Annua Lorda). Può restare in azienda (o essere versato
+        all'INPS se l'azienda ha più di 50 dipendenti) ed essere liquidato al termine del rapporto di lavoro, oppure
+        essere destinato a un fondo pensione per integrare la pensione futura.
       </p>
       <p>
         I fondi pensione sono soggetti a tassazione agevolata e permettono di dedurre i contributi versati dal reddito
@@ -140,7 +145,7 @@ const Tfr: React.FC = () => {
       </p>
       <p>
         Nei calcoli qui sotto, per i fondi pensione vengono considerati i costi medi dei vari profili di rischio. Per il
-        PAC viene considerato un costo dello {formatPercentage(PAC_COST)}.
+        PAC viene considerato un costo dello {formatPercentage(PAC_COST)} (TER e imposta di bollo).
       </p>
       <div className="alert">
         <p>
@@ -302,8 +307,13 @@ const Tfr: React.FC = () => {
           Attivi il <strong>contributo aggiuntivo del DdL</strong> se versi almeno{" "}
           {formatCurrency(minVoluntaryContributionAmount)}.
         </p>
-        <p>Massimo importo deducibile FPN: {formatCurrency((MAX_DEDUCTIBLE - (ddlContribution / 100) * ral) / 12)}</p>
-        <p>Massimo importo deducibile FPA/PIP: {formatCurrency(MAX_DEDUCTIBLE / 12)}</p>
+        <p>
+          Massimo importo mensile deducibile:
+          <ul>
+            <li>FPN: {formatCurrency((MAX_DEDUCTIBLE - (ddlContribution / 100) * ral) / 12)}</li>
+            <li>FPA/PIP: {formatCurrency(MAX_DEDUCTIBLE / 12)}</li>
+          </ul>
+        </p>
       </div>
 
       <h3>E dopo {years} anni...</h3>
@@ -335,98 +345,123 @@ const Tfr: React.FC = () => {
           <thead>
             <tr>
               <th>Destinazione</th>
-              <th>TFR versato</th>
-              <th>Contributo volontario</th>
-              <th>Contributo DdL</th>
-              <th>Risparmio IRPEF</th>
+              <th>TFR annuo</th>
+              <th>Contributo volontario annuo</th>
+              <th>Contributo DdL annuo</th>
+              <th>Rendimento netto annuo</th>
               <th>Tasse liquidazione</th>
-              <th>Netto</th>
-              <th>Rendimento netto</th>
+              <th>Montante netto</th>
+              <th>Risparmio IRPEF</th>
+              <th>Totale netto</th>
+              <th>Rendimento netto finale annualizzato</th>
             </tr>
           </thead>
           <tbody>
             <tr
               className={
                 getInpsLiquidation() >=
-                  getFundLiquidation(FPN_COST, annualVoluntaryContribution + annualDdlContribution) &&
-                getInpsLiquidation() >= getFundLiquidation(FPA_COST, annualVoluntaryContribution) &&
-                getInpsLiquidation() >= getFundLiquidation(PIP_COST, annualVoluntaryContribution)
+                  getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) &&
+                getInpsLiquidation() >= getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) &&
+                getInpsLiquidation() >= getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution)
                   ? "winner"
                   : ""
               }
             >
               <td>INPS/azienda</td>
-              <td>{formatCurrency(totalTfrContribution)}</td>
+              <td>{formatCurrency(annualTfrContribution)}</td>
               <td>-</td>
               <td>-</td>
-              <td>-</td>
+              <td>{formatPercentage(INPS_NET_REEVAL)}</td>
               <td>{formatPercentage(getAvgTaxRate(ral))}</td>
+              <td>{formatCurrency(getInpsLiquidation())}</td>
+              <td>-</td>
               <td>{formatCurrency(getInpsLiquidation())}</td>
               <td>{formatPercentage(getGain(totalTfrContribution, getInpsLiquidation(), years))}</td>
             </tr>
             <tr
               className={
-                getFundLiquidation(FPN_COST, annualVoluntaryContribution + annualDdlContribution) >=
+                getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) >=
                   getInpsLiquidation() &&
-                getFundLiquidation(FPN_COST, annualVoluntaryContribution + annualDdlContribution) >=
-                  getFundLiquidation(FPA_COST, annualVoluntaryContribution) &&
-                getFundLiquidation(FPN_COST, annualVoluntaryContribution + annualDdlContribution) >=
-                  getFundLiquidation(PIP_COST, annualVoluntaryContribution)
+                getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) >=
+                  getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) &&
+                getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) >=
+                  getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution)
                   ? "winner"
                   : ""
               }
             >
               <td>FPN</td>
-              <td>{formatCurrency(totalTfrContribution)}</td>
-              <td>{formatCurrency(totalVoluntaryContribution)}</td>
-              <td>{formatCurrency(voluntaryContribution ? totalDdlContribution : 0)}</td>
+              <td>{formatCurrency(annualTfrContribution)}</td>
+              <td>{formatCurrency(annualVoluntaryContribution)}</td>
+              <td>{formatCurrency(voluntaryContribution ? annualDdlContribution : 0)}</td>
+              <td>{formatPercentage(FPN_NET_GAIN)}</td>
+              <td>{formatPercentage(getFundTax(years))}</td>
+              <td>
+                {formatCurrency(getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution))}
+              </td>
               <td>
                 {formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution, years))}
               </td>
-              <td>{formatPercentage(getFundTax(years))}</td>
               <td>
-                {formatCurrency(getFundLiquidation(FPN_COST, annualVoluntaryContribution + annualDdlContribution))}
+                {formatCurrency(
+                  getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) +
+                    getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution, years)
+                )}
               </td>
               <td>{formatPercentage(getFpnGain())}</td>
             </tr>
             <tr
               className={
-                getFundLiquidation(FPA_COST, annualVoluntaryContribution) >= getInpsLiquidation() &&
-                getFundLiquidation(FPA_COST, annualVoluntaryContribution) >=
-                  getFundLiquidation(FPN_COST, annualVoluntaryContribution + annualDdlContribution) &&
-                getFundLiquidation(FPA_COST, annualVoluntaryContribution) >=
-                  getFundLiquidation(PIP_COST, annualVoluntaryContribution)
+                getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) >= getInpsLiquidation() &&
+                getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) >=
+                  getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) &&
+                getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) >=
+                  getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution)
                   ? "winner"
                   : ""
               }
             >
               <td>FPA</td>
-              <td>{formatCurrency(totalTfrContribution)}</td>
-              <td>{formatCurrency(totalVoluntaryContribution)}</td>
+              <td>{formatCurrency(annualTfrContribution)}</td>
+              <td>{formatCurrency(annualVoluntaryContribution)}</td>
               <td>-</td>
-              <td>{formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution, years))}</td>
+              <td>{formatPercentage(FPA_NET_GAIN)}</td>
               <td>{formatPercentage(getFundTax(years))}</td>
-              <td>{formatCurrency(getFundLiquidation(FPA_COST, annualVoluntaryContribution))}</td>
+              <td>{formatCurrency(getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution))}</td>
+              <td>{formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution, years))}</td>
+              <td>
+                {formatCurrency(
+                  getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) +
+                    getFundTaxSaving(ral, annualVoluntaryContribution, years)
+                )}
+              </td>
               <td>{formatPercentage(getFpaGain())}</td>
             </tr>
             <tr
               className={
-                getFundLiquidation(PIP_COST, annualVoluntaryContribution) >= getInpsLiquidation() &&
-                getFundLiquidation(PIP_COST, annualVoluntaryContribution) >=
-                  getFundLiquidation(FPN_COST, annualVoluntaryContribution + annualDdlContribution) &&
-                getFundLiquidation(PIP_COST, annualVoluntaryContribution) >=
-                  getFundLiquidation(FPA_COST, annualVoluntaryContribution)
+                getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution) >= getInpsLiquidation() &&
+                getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution) >=
+                  getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) &&
+                getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution) >=
+                  getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution)
                   ? "winner"
                   : ""
               }
             >
               <td>PIP</td>
-              <td>{formatCurrency(totalTfrContribution)}</td>
-              <td>{formatCurrency(totalVoluntaryContribution)}</td>
+              <td>{formatCurrency(annualTfrContribution)}</td>
+              <td>{formatCurrency(annualVoluntaryContribution)}</td>
               <td>-</td>
-              <td>{formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution, years))}</td>
+              <td>{formatPercentage(PIP_NET_GAIN)}</td>
               <td>{formatPercentage(getFundTax(years))}</td>
-              <td>{formatCurrency(getFundLiquidation(PIP_COST, annualVoluntaryContribution))}</td>
+              <td>{formatCurrency(getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution))}</td>
+              <td>{formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution, years))}</td>
+              <td>
+                {formatCurrency(
+                  getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution) +
+                    getFundTaxSaving(ral, annualVoluntaryContribution, years)
+                )}
+              </td>
               <td>{formatPercentage(getPipGain())}</td>
             </tr>
           </tbody>
@@ -463,12 +498,13 @@ const Tfr: React.FC = () => {
           <thead>
             <tr>
               <th>Destinazione</th>
-              <th>Risparmio IRPEF</th>
-              <th>Contributo</th>
+              <th>Risparmio IRPEF annuo</th>
+              <th>Contributo annuo</th>
+              <th>Rendimento netto annuo</th>
               <th>Tasse liquidazione</th>
               <th>Netto PAC</th>
-              <th>Netto FPN</th>
-              <th>Netto totale</th>
+              <th>Montante netto FPN</th>
+              <th>Totale netto</th>
             </tr>
           </thead>
           <tbody>
@@ -482,10 +518,9 @@ const Tfr: React.FC = () => {
               }
             >
               <td>FPN + PAC IRPEF</td>
-              <td>
-                {formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution, years))}
-              </td>
+              <td>{formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution))}</td>
               <td>-</td>
+              <td>{formatPercentage(PAC_GAIN)}</td>
               <td>{formatPercentage(PAC_TAX)}</td>
               <td>
                 {formatCurrency(
@@ -493,7 +528,7 @@ const Tfr: React.FC = () => {
                 )}
               </td>
               <td>
-                {formatCurrency(getFundLiquidation(FPN_COST, annualVoluntaryContribution + annualDdlContribution))}
+                {formatCurrency(getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution))}
               </td>
               <td>{formatCurrency(fpnAndPacLiquidation)}</td>
             </tr>
@@ -507,14 +542,11 @@ const Tfr: React.FC = () => {
               }
             >
               <td>FPN max + PAC min</td>
+              <td>{formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution))}</td>
               <td>
-                {formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution, years))}
+                {formatCurrency(Math.max(annualVoluntaryContribution - (MAX_DEDUCTIBLE - annualDdlContribution), 0))}
               </td>
-              <td>
-                {formatCurrency(
-                  Math.max(totalVoluntaryContribution - (MAX_DEDUCTIBLE - annualDdlContribution) * years, 0)
-                )}
-              </td>
+              <td>{formatPercentage(PAC_GAIN)}</td>
               <td>{formatPercentage(PAC_TAX)}</td>
               <td>
                 {formatCurrency(
@@ -544,8 +576,9 @@ const Tfr: React.FC = () => {
               }
             >
               <td>FPN min + PAC max</td>
-              <td>{formatCurrency(getFundTaxSaving(ral, annualMinContribution, years))}</td>
-              <td>{formatCurrency(Math.max(totalVoluntaryContribution - totalMinVoluntaryContribution, 0))}</td>
+              <td>{formatCurrency(getFundTaxSaving(ral, annualMinContribution))}</td>
+              <td>{formatCurrency(Math.max(annualVoluntaryContribution - annualMinVoluntaryContribution, 0))}</td>
+              <td>{formatPercentage(PAC_GAIN)}</td>
               <td>{formatPercentage(PAC_TAX)}</td>
               <td>
                 {formatCurrency(
@@ -555,7 +588,7 @@ const Tfr: React.FC = () => {
                   )
                 )}
               </td>
-              <td>{formatCurrency(getFundLiquidation(FPN_COST, annualMinContribution))}</td>
+              <td>{formatCurrency(getFundLiquidation(FPN_NET_GAIN, annualMinContribution))}</td>
               <td>{formatCurrency(fpnMinAndPacLiquidation)}</td>
             </tr>
             <tr
@@ -569,10 +602,11 @@ const Tfr: React.FC = () => {
             >
               <td>PAC</td>
               <td>-</td>
-              <td>{formatCurrency(totalVoluntaryContribution)}</td>
+              <td>{formatCurrency(annualVoluntaryContribution)}</td>
+              <td>{formatPercentage(PAC_GAIN)}</td>
               <td>{formatPercentage(PAC_TAX)}</td>
               <td>{formatCurrency(getPacLiquidation(annualVoluntaryContribution))}</td>
-              <td>{formatCurrency(getFundLiquidation(FPN_COST))}</td>
+              <td>{formatCurrency(getFundLiquidation(FPN_NET_GAIN))}</td>
               <td>{formatCurrency(fpnZeroAndPacLiquidation)}</td>
             </tr>
           </tbody>
