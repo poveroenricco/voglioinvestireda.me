@@ -501,7 +501,7 @@ const Tfr: React.FC = () => {
               <th>Risparmio IRPEF annuo</th>
               <th>Contributo annuo</th>
               <th>Rendimento netto annuo</th>
-              <th>Tasse liquidazione</th>
+              <th>Tasse sulla plusvalenza</th>
               <th>Netto PAC</th>
               <th>Montante netto FPN</th>
               <th>Totale netto</th>
