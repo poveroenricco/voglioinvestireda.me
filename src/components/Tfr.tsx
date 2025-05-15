@@ -2,6 +2,7 @@ import { useState } from "react";
 import { formatCurrency, formatPercentage } from "../utils/format";
 import { applyTax, applyGain, getAvgTaxRate, getGain } from "../utils/finance";
 import { getFundTax, getFundTaxSaving, MAX_DEDUCTIBLE } from "../utils/tfr";
+import InputStepper from "./InputStepper";
 
 import "./Tfr.css";
 
@@ -14,6 +15,8 @@ const Tfr: React.FC = () => {
   const [monthlyVoluntaryContribution, setMonthlyVoluntaryContribution] = useState<number>(0);
   const [years, setYears] = useState<number>(35);
   const [pacApr, setPacApr] = useState<number>(6);
+  const [bonds, setBonds] = useState<number>(40);
+  const [pacBonds, setPacBonds] = useState<number>(20);
 
   const INPS_REEVAL_TAX = 0.17;
   const INPS_GROSS_REEVAL = 0.015 + 0.75 * (inflation / 100);
@@ -23,11 +26,13 @@ const Tfr: React.FC = () => {
   const FPA_COST = 0.014525;
   const PIP_COST = 0.022625;
 
-  const FPN_NET_GAIN = applyTax(apr / 100 - FPN_COST, 0.2);
-  const FPA_NET_GAIN = applyTax(apr / 100 - FPA_COST, 0.2);
-  const PIP_NET_GAIN = applyTax(apr / 100 - PIP_COST, 0.2);
+  const FUND_GAIN_TAX = 0.2 * (1 - bonds / 100) + 0.125 * (bonds / 100);
 
-  const PAC_TAX = 0.26;
+  const FPN_NET_GAIN = applyTax(apr / 100 - FPN_COST, FUND_GAIN_TAX);
+  const FPA_NET_GAIN = applyTax(apr / 100 - FPA_COST, FUND_GAIN_TAX);
+  const PIP_NET_GAIN = applyTax(apr / 100 - PIP_COST, FUND_GAIN_TAX);
+
+  const PAC_TAX = 0.26 * (1 - pacBonds / 100) + 0.125 * (pacBonds / 100);
   const PAC_COST = 0.004;
   const PAC_GAIN = pacApr / 100 - PAC_COST;
 
@@ -73,27 +78,31 @@ const Tfr: React.FC = () => {
     return applyTax(contributionToBeTaxed, getFundTax(years)) + (capital - contributionToBeTaxed);
   };
 
+  const fpnLiquidation = getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution);
+  const fpaLiquidation = getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution);
+  const pipLiquidation = getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution);
+
+  const annualFpnTaxSaving = getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution);
+
+  const totalFpnTaxSaving = getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution, years);
+  const totalFpaTaxSaving = getFundTaxSaving(ral, annualVoluntaryContribution, years);
+  const totalPipTaxSaving = totalFpaTaxSaving;
+
   const getFpnGain = () => {
     const contribution = totalTfrContribution + totalVoluntaryContribution;
-    const final =
-      getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) +
-      getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution, years);
+    const final = fpnLiquidation + totalFpnTaxSaving;
     return getGain(contribution, final, years);
   };
 
   const getFpaGain = () => {
     const contribution = totalTfrContribution + totalVoluntaryContribution;
-    const final =
-      getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) +
-      getFundTaxSaving(ral, annualVoluntaryContribution, years);
+    const final = fpaLiquidation + totalFpaTaxSaving;
     return getGain(contribution, final, years);
   };
 
   const getPipGain = () => {
     const contribution = totalTfrContribution + totalVoluntaryContribution;
-    const final =
-      getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution) +
-      getFundTaxSaving(ral, annualVoluntaryContribution, years);
+    const final = pipLiquidation + totalPipTaxSaving;
     return getGain(contribution, final, years);
   };
 
@@ -110,23 +119,21 @@ const Tfr: React.FC = () => {
     return totalContribution + applyTax(pac - totalContribution, PAC_TAX);
   };
 
-  const fpnAndPacLiquidation =
-    getPacLiquidation(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution)) +
-    getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution);
+  const fpnAndPacLiquidation = fpnLiquidation + getPacLiquidation(annualFpnTaxSaving);
 
-  const fpnMaxAndPacLiquidation =
-    getPacLiquidation(
-      getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution) +
-        Math.max(annualVoluntaryContribution - (MAX_DEDUCTIBLE - annualDdlContribution), 0)
-    ) + getFundLiquidation(FPN_NET_GAIN, Math.min(annualVoluntaryContribution + annualDdlContribution, MAX_DEDUCTIBLE));
+  const fpnMaxContribution = Math.min(annualVoluntaryContribution + annualDdlContribution, MAX_DEDUCTIBLE);
+  const fpnMaxLiquidation = getFundLiquidation(FPN_NET_GAIN, fpnMaxContribution);
+  const pacMinContribution = Math.max(annualVoluntaryContribution - (MAX_DEDUCTIBLE - annualDdlContribution), 0);
+  const pacMinLiquidation = getPacLiquidation(annualFpnTaxSaving + pacMinContribution);
+  const fpnMaxAndPacMinLiquidation = fpnMaxLiquidation + pacMinLiquidation;
 
-  const fpnMinAndPacLiquidation =
-    getPacLiquidation(
-      getFundTaxSaving(ral, annualMinContribution) +
-        Math.max(annualVoluntaryContribution - annualMinVoluntaryContribution, 0)
-    ) + getFundLiquidation(FPN_NET_GAIN, annualMinContribution);
+  const fpnMinLiquidation = getFundLiquidation(FPN_NET_GAIN, annualMinContribution);
+  const pacMaxContribution = Math.max(annualVoluntaryContribution - annualMinVoluntaryContribution, 0);
+  const pacMaxLiquidation = getPacLiquidation(getFundTaxSaving(ral, annualMinContribution) + pacMaxContribution);
+  const fpnMinAndPacMaxLiquidation = fpnMinLiquidation + pacMaxLiquidation;
 
-  const fpnZeroAndPacLiquidation = getPacLiquidation(annualVoluntaryContribution) + getFundLiquidation(FPN_NET_GAIN);
+  const fpnZeroLiquidation = getFundLiquidation(FPN_NET_GAIN);
+  const fpnZeroAndPacLiquidation = fpnZeroLiquidation + getPacLiquidation(annualVoluntaryContribution);
 
   return (
     <div>
@@ -151,6 +158,7 @@ const Tfr: React.FC = () => {
         Nei calcoli qui sotto, per i fondi pensione vengono considerati i costi medi dei vari profili di rischio. Per il
         PAC viene considerato un costo dello {formatPercentage(PAC_COST)} (TER e imposta di bollo).
       </p>
+
       <div className="alert">
         <p>
           Le informazioni fornite hanno solo scopo informativo e non costituiscono consulenza finanziaria. Non mi assumo
@@ -158,75 +166,41 @@ const Tfr: React.FC = () => {
           consigliabile fare le proprie verifiche o consultare un professionista qualificato.
         </p>
       </div>
-      <div className="input-group">
-        <label htmlFor="ral">
-          RAL <span className="mu">€</span>
-        </label>
-        <br />
-        <div className="input-stepper">
-          <button type="button" onClick={() => setRal((prev) => Math.max(0, prev - 1000))}>
-            −
-          </button>
-          <input
-            id="ral"
-            type="number"
-            value={ral}
-            step={1000}
-            min={0}
-            onChange={(e) => setRal(Number(e.target.value))}
-            placeholder="RAL"
-          />
-          <button type="button" onClick={() => setRal((prev) => Math.max(0, prev + 1000))}>
-            +
-          </button>
-        </div>
-      </div>
-      <div className="input-group">
-        <label htmlFor="apr">
-          Rendimento lordo fondo <span className="mu">%/anno</span>
-        </label>
-        <br />
-        <div className="input-stepper">
-          <button type="button" onClick={() => setApr((prev) => Math.max(0, prev - 0.5))}>
-            −
-          </button>
-          <input
-            id="apr"
-            type="number"
-            value={apr}
-            step={0.5}
-            min={0}
-            onChange={(e) => setApr(Number(e.target.value))}
-            placeholder="Rendimento medio annuo"
-          />
-          <button type="button" onClick={() => setApr((prev) => Math.max(0, prev + 0.5))}>
-            +
-          </button>
-        </div>
-      </div>
-      <div className="input-group">
-        <label htmlFor="inflation">
-          Inflazione <span className="mu">%/anno</span>
-        </label>
-        <br />
-        <div className="input-stepper">
-          <button type="button" onClick={() => setInflation((prev) => Math.max(0, prev - 0.5))}>
-            −
-          </button>
-          <input
-            id="inflation"
-            type="number"
-            value={inflation}
-            step={0.5}
-            min={0}
-            onChange={(e) => setInflation(Number(e.target.value))}
-            placeholder="Inflazione media annua"
-          />
-          <button type="button" onClick={() => setInflation((prev) => Math.max(0, prev + 0.5))}>
-            +
-          </button>
-        </div>
-      </div>
+
+      <InputStepper
+        id="ral"
+        label="RAL"
+        mu="€"
+        value={ral}
+        onDownClick={() => setRal((prev) => Math.max(0, prev - 1000))}
+        onUpClick={() => setRal((prev) => Math.max(0, prev + 1000))}
+        onUpdate={(value) => setRal(value)}
+        step={1000}
+        min={0}
+        placeholder="28000"
+      />
+      <InputStepper
+        id="apr"
+        label="Rendimento lordo fondo"
+        mu="%/anno"
+        value={apr}
+        onDownClick={() => setApr((prev) => Math.max(0, prev - 0.5))}
+        onUpClick={() => setApr((prev) => Math.max(0, prev + 0.5))}
+        onUpdate={(value) => setApr(value)}
+        step={0.5}
+        placeholder="3"
+      />
+      <InputStepper
+        id="inflation"
+        label="Inflazione"
+        mu="%/anno"
+        value={inflation}
+        onDownClick={() => setInflation((prev) => Math.max(0, prev - 0.5))}
+        onUpClick={() => setInflation((prev) => Math.max(0, prev + 0.5))}
+        onUpdate={(value) => setInflation(value)}
+        step={0.5}
+        placeholder="2"
+      />
 
       <h3>Hai dei risparmi mensili?</h3>
       <p>
@@ -237,75 +211,57 @@ const Tfr: React.FC = () => {
         attiva automaticamente il <strong>contributo aggiuntivo del datore di lavoro</strong>, un'opportunità
         vantaggiosa che rende l'adesione ancora più conveniente.
       </p>
-      <div className="input-group">
-        <label htmlFor="ddlContribution">
-          Contributo FPN Datore di Lavoro <span className="mu">RAL %/anno</span>
-        </label>
-        <br />
-        <div className="input-stepper">
-          <button type="button" onClick={() => setDdlContribution((prev) => Math.max(0, prev - 0.05))}>
-            −
-          </button>
-          <input
-            id="ddlContribution"
-            type="number"
-            value={ddlContribution}
-            step={0.05}
-            min={0}
-            onChange={(e) => setDdlContribution(Number(e.target.value))}
-            placeholder="Contributo DdL"
-          />
-          <button type="button" onClick={() => setDdlContribution((prev) => Math.max(0, prev + 0.05))}>
-            +
-          </button>
-        </div>
-      </div>
-      <div className="input-group">
-        <label htmlFor="minVoluntaryContribution">
-          Contributo volontario minimo <span className="mu">RAL %/anno</span>
-        </label>
-        <br />
-        <div className="input-stepper">
-          <button type="button" onClick={() => setMinVoluntaryContribution((prev) => Math.max(0, prev - 0.05))}>
-            −
-          </button>
-          <input
-            id="minVoluntaryContribution"
-            type="number"
-            value={minVoluntaryContribution}
-            step={0.05}
-            min={0}
-            onChange={(e) => setMinVoluntaryContribution(Number(e.target.value))}
-            placeholder="Contributo volontario minimo"
-          />
-          <button type="button" onClick={() => setMinVoluntaryContribution((prev) => Math.max(0, prev + 0.05))}>
-            +
-          </button>
-        </div>
-      </div>
-      <div className="input-group">
-        <label htmlFor="monthlyVoluntaryContribution">
-          Capacità di risparmio mensile <span className="mu">€/mese</span>
-        </label>
-        <br />
-        <div className="input-stepper">
-          <button type="button" onClick={() => setMonthlyVoluntaryContribution((prev) => Math.max(0, prev - 20))}>
-            −
-          </button>
-          <input
-            id="monthlyVoluntaryContribution"
-            type="number"
-            value={monthlyVoluntaryContribution}
-            step={minVoluntaryContributionAmount}
-            min={0}
-            onChange={(e) => setMonthlyVoluntaryContribution(Number(e.target.value))}
-            placeholder="Contributo volontario mensile"
-          />
-          <button type="button" onClick={() => setMonthlyVoluntaryContribution((prev) => Math.max(0, prev + 20))}>
-            +
-          </button>
-        </div>
-      </div>
+
+      <InputStepper
+        id="ddlContribution"
+        label="Contributo DdL"
+        mu="RAL %/anno"
+        value={ddlContribution}
+        onDownClick={() => setDdlContribution((prev) => Math.max(0, prev - 0.05))}
+        onUpClick={() => setDdlContribution((prev) => Math.max(0, prev + 0.05))}
+        onUpdate={(value) => setDdlContribution(value)}
+        step={0.05}
+        min={0}
+        placeholder="1,55"
+      />
+      <InputStepper
+        id="minVoluntaryContribution"
+        label="Contributo volontario minimo"
+        mu="RAL %/anno"
+        value={minVoluntaryContribution}
+        onDownClick={() => setMinVoluntaryContribution((prev) => Math.max(0, prev - 0.05))}
+        onUpClick={() => setMinVoluntaryContribution((prev) => Math.max(0, prev + 0.05))}
+        onUpdate={(value) => setMinVoluntaryContribution(value)}
+        step={0.05}
+        min={0}
+        placeholder="0,55"
+      />
+      <InputStepper
+        id="monthlyVoluntaryContribution"
+        label="Capacità di risparmio mensile"
+        mu="€/mese"
+        value={monthlyVoluntaryContribution}
+        onDownClick={() => setMonthlyVoluntaryContribution((prev) => Math.max(0, prev - 20))}
+        onUpClick={() => setMonthlyVoluntaryContribution((prev) => Math.max(0, prev + 20))}
+        onUpdate={(value) => setMonthlyVoluntaryContribution(value)}
+        step={minVoluntaryContributionAmount}
+        min={0}
+        placeholder="120"
+      />
+      <InputStepper
+        id="bonds"
+        label="Strumenti a tassazione agevolata"
+        mu="%"
+        value={bonds}
+        onDownClick={() => setBonds((prev) => Math.max(0, prev - 5))}
+        onUpClick={() => setBonds((prev) => Math.max(0, prev + 5))}
+        onUpdate={(value) => setBonds(value)}
+        step={5}
+        min={0}
+        max={100}
+        placeholder="40"
+      />
+
       <div className="alert alert-info">
         <p>
           Attivi il <strong>contributo aggiuntivo del DdL</strong> se versi almeno{" "}
@@ -321,28 +277,20 @@ const Tfr: React.FC = () => {
       </div>
 
       <h3>E dopo {years} anni...</h3>
-      <div className="input-group">
-        <label htmlFor="years">Anni</label>
-        <br />
-        <div className="input-stepper">
-          <button type="button" onClick={() => setYears((prev) => Math.max(1, prev - 1))}>
-            −
-          </button>
-          <input
-            id="years"
-            type="number"
-            value={years}
-            step={1}
-            min={1}
-            max={42}
-            onChange={(e) => setYears(Number(e.target.value))}
-            placeholder="Anni"
-          />
-          <button type="button" onClick={() => setYears((prev) => Math.max(1, prev + 1))}>
-            +
-          </button>
-        </div>
-      </div>
+
+      <InputStepper
+        id="years"
+        label="Anni"
+        mu="anni"
+        value={years}
+        onDownClick={() => setYears((prev) => Math.max(1, prev - 1))}
+        onUpClick={() => setYears((prev) => Math.max(1, prev + 1))}
+        onUpdate={(value) => setYears(value)}
+        step={1}
+        min={1}
+        max={42}
+        placeholder="35"
+      />
 
       <div className="table-container">
         <table className="table">
@@ -363,10 +311,9 @@ const Tfr: React.FC = () => {
           <tbody>
             <tr
               className={
-                getInpsLiquidation() >=
-                  getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) &&
-                getInpsLiquidation() >= getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) &&
-                getInpsLiquidation() >= getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution)
+                getInpsLiquidation() >= fpnLiquidation &&
+                getInpsLiquidation() >= fpaLiquidation &&
+                getInpsLiquidation() >= pipLiquidation
                   ? "winner"
                   : ""
               }
@@ -384,12 +331,9 @@ const Tfr: React.FC = () => {
             </tr>
             <tr
               className={
-                getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) >=
-                  getInpsLiquidation() &&
-                getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) >=
-                  getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) &&
-                getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) >=
-                  getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution)
+                fpnLiquidation >= getInpsLiquidation() &&
+                fpnLiquidation >= fpaLiquidation &&
+                fpnLiquidation >= pipLiquidation
                   ? "winner"
                   : ""
               }
@@ -400,27 +344,16 @@ const Tfr: React.FC = () => {
               <td>{formatCurrency(voluntaryContribution ? annualDdlContribution : 0)}</td>
               <td>{formatPercentage(FPN_NET_GAIN)}</td>
               <td>{formatPercentage(getFundTax(years))}</td>
-              <td>
-                {formatCurrency(getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution))}
-              </td>
-              <td>
-                {formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution, years))}
-              </td>
-              <td>
-                {formatCurrency(
-                  getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) +
-                    getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution, years)
-                )}
-              </td>
+              <td>{formatCurrency(fpnLiquidation)}</td>
+              <td>{formatCurrency(totalFpnTaxSaving)}</td>
+              <td>{formatCurrency(fpnLiquidation + totalFpnTaxSaving)}</td>
               <td>{formatPercentage(getFpnGain())}</td>
             </tr>
             <tr
               className={
-                getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) >= getInpsLiquidation() &&
-                getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) >=
-                  getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) &&
-                getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) >=
-                  getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution)
+                fpaLiquidation >= getInpsLiquidation() &&
+                fpaLiquidation >= fpnLiquidation &&
+                fpaLiquidation >= pipLiquidation
                   ? "winner"
                   : ""
               }
@@ -431,23 +364,16 @@ const Tfr: React.FC = () => {
               <td>-</td>
               <td>{formatPercentage(FPA_NET_GAIN)}</td>
               <td>{formatPercentage(getFundTax(years))}</td>
-              <td>{formatCurrency(getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution))}</td>
-              <td>{formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution, years))}</td>
-              <td>
-                {formatCurrency(
-                  getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution) +
-                    getFundTaxSaving(ral, annualVoluntaryContribution, years)
-                )}
-              </td>
+              <td>{formatCurrency(fpaLiquidation)}</td>
+              <td>{formatCurrency(totalFpaTaxSaving)}</td>
+              <td>{formatCurrency(fpaLiquidation + totalFpaTaxSaving)}</td>
               <td>{formatPercentage(getFpaGain())}</td>
             </tr>
             <tr
               className={
-                getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution) >= getInpsLiquidation() &&
-                getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution) >=
-                  getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution) &&
-                getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution) >=
-                  getFundLiquidation(FPA_NET_GAIN, annualVoluntaryContribution)
+                pipLiquidation >= getInpsLiquidation() &&
+                pipLiquidation >= fpnLiquidation &&
+                pipLiquidation >= fpaLiquidation
                   ? "winner"
                   : ""
               }
@@ -458,14 +384,9 @@ const Tfr: React.FC = () => {
               <td>-</td>
               <td>{formatPercentage(PIP_NET_GAIN)}</td>
               <td>{formatPercentage(getFundTax(years))}</td>
-              <td>{formatCurrency(getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution))}</td>
-              <td>{formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution, years))}</td>
-              <td>
-                {formatCurrency(
-                  getFundLiquidation(PIP_NET_GAIN, annualVoluntaryContribution) +
-                    getFundTaxSaving(ral, annualVoluntaryContribution, years)
-                )}
-              </td>
+              <td>{formatCurrency(pipLiquidation)}</td>
+              <td>{formatCurrency(totalPipTaxSaving)}</td>
+              <td>{formatCurrency(pipLiquidation + totalPipTaxSaving)}</td>
               <td>{formatPercentage(getPipGain())}</td>
             </tr>
           </tbody>
@@ -473,29 +394,31 @@ const Tfr: React.FC = () => {
       </div>
 
       <h3>E se investi il contributo volontario in un PAC?</h3>
-      <div className="input-group">
-        <label htmlFor="pacApr">
-          Rendimento lordo PAC <span className="mu">%/anno</span>
-        </label>
-        <br />
-        <div className="input-stepper">
-          <button type="button" onClick={() => setPacApr((prev) => Math.max(0, prev - 0.5))}>
-            −
-          </button>
-          <input
-            id="pacApr"
-            type="number"
-            value={pacApr}
-            step={0.5}
-            min={0}
-            onChange={(e) => setPacApr(Number(e.target.value))}
-            placeholder="Rendimento PAC"
-          />
-          <button type="button" onClick={() => setPacApr((prev) => Math.max(0, prev + 0.5))}>
-            +
-          </button>
-        </div>
-      </div>
+
+      <InputStepper
+        id="pacApr"
+        label="Rendimento lordo PAC"
+        mu="%/anno"
+        value={pacApr}
+        onDownClick={() => setPacApr((prev) => Math.max(0, prev - 0.5))}
+        onUpClick={() => setPacApr((prev) => Math.max(0, prev + 0.5))}
+        onUpdate={(value) => setPacApr(value)}
+        step={0.5}
+        placeholder="6"
+      />
+      <InputStepper
+        id="pacBonds"
+        label="Strumenti a tassazione agevolata"
+        mu="%"
+        value={pacBonds}
+        onDownClick={() => setPacBonds((prev) => Math.max(0, prev - 5))}
+        onUpClick={() => setPacBonds((prev) => Math.max(0, prev + 5))}
+        onUpdate={(value) => setPacBonds(value)}
+        step={5}
+        min={0}
+        max={100}
+        placeholder="20"
+      />
 
       <div className="table-container">
         <table className="table">
@@ -514,92 +437,63 @@ const Tfr: React.FC = () => {
           <tbody>
             <tr
               className={
-                fpnAndPacLiquidation >= fpnMaxAndPacLiquidation &&
-                fpnAndPacLiquidation >= fpnMinAndPacLiquidation &&
+                fpnAndPacLiquidation >= fpnMaxAndPacMinLiquidation &&
+                fpnAndPacLiquidation >= fpnMinAndPacMaxLiquidation &&
                 fpnAndPacLiquidation >= fpnZeroAndPacLiquidation
                   ? "winner"
                   : ""
               }
             >
               <td>FPN + PAC IRPEF</td>
-              <td>{formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution))}</td>
+              <td>{formatCurrency(annualFpnTaxSaving)}</td>
               <td>-</td>
               <td>{formatPercentage(PAC_GAIN)}</td>
               <td>{formatPercentage(PAC_TAX)}</td>
-              <td>
-                {formatCurrency(
-                  getPacLiquidation(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution))
-                )}
-              </td>
-              <td>
-                {formatCurrency(getFundLiquidation(FPN_NET_GAIN, annualVoluntaryContribution + annualDdlContribution))}
-              </td>
+              <td>{formatCurrency(getPacLiquidation(annualFpnTaxSaving))}</td>
+              <td>{formatCurrency(fpnLiquidation)}</td>
               <td>{formatCurrency(fpnAndPacLiquidation)}</td>
             </tr>
             <tr
               className={
-                fpnMaxAndPacLiquidation >= fpnAndPacLiquidation &&
-                fpnMaxAndPacLiquidation >= fpnMinAndPacLiquidation &&
-                fpnMaxAndPacLiquidation >= fpnZeroAndPacLiquidation
+                fpnMaxAndPacMinLiquidation >= fpnAndPacLiquidation &&
+                fpnMaxAndPacMinLiquidation >= fpnMinAndPacMaxLiquidation &&
+                fpnMaxAndPacMinLiquidation >= fpnZeroAndPacLiquidation
                   ? "winner"
                   : ""
               }
             >
               <td>FPN max + PAC min</td>
-              <td>{formatCurrency(getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution))}</td>
-              <td>
-                {formatCurrency(Math.max(annualVoluntaryContribution - (MAX_DEDUCTIBLE - annualDdlContribution), 0))}
-              </td>
+              <td>{formatCurrency(annualFpnTaxSaving)}</td>
+              <td>{formatCurrency(pacMinContribution)}</td>
               <td>{formatPercentage(PAC_GAIN)}</td>
               <td>{formatPercentage(PAC_TAX)}</td>
-              <td>
-                {formatCurrency(
-                  getPacLiquidation(
-                    getFundTaxSaving(ral, annualVoluntaryContribution + annualDdlContribution) +
-                      Math.max(annualVoluntaryContribution - (MAX_DEDUCTIBLE - annualDdlContribution), 0)
-                  )
-                )}
-              </td>
-              <td>
-                {formatCurrency(
-                  getFundLiquidation(
-                    FPN_NET_GAIN,
-                    Math.min(annualVoluntaryContribution + annualDdlContribution, MAX_DEDUCTIBLE)
-                  )
-                )}
-              </td>
-              <td>{formatCurrency(fpnMaxAndPacLiquidation)}</td>
+              <td>{formatCurrency(pacMinLiquidation)}</td>
+              <td>{formatCurrency(fpnMaxLiquidation)}</td>
+              <td>{formatCurrency(fpnMaxAndPacMinLiquidation)}</td>
             </tr>
             <tr
               className={
-                fpnMinAndPacLiquidation >= fpnAndPacLiquidation &&
-                fpnMinAndPacLiquidation >= fpnMaxAndPacLiquidation &&
-                fpnMinAndPacLiquidation >= fpnZeroAndPacLiquidation
+                fpnMinAndPacMaxLiquidation >= fpnAndPacLiquidation &&
+                fpnMinAndPacMaxLiquidation >= fpnMaxAndPacMinLiquidation &&
+                fpnMinAndPacMaxLiquidation >= fpnZeroAndPacLiquidation
                   ? "winner"
                   : ""
               }
             >
               <td>FPN min + PAC max</td>
               <td>{formatCurrency(getFundTaxSaving(ral, annualMinContribution))}</td>
-              <td>{formatCurrency(Math.max(annualVoluntaryContribution - annualMinVoluntaryContribution, 0))}</td>
+              <td>{formatCurrency(pacMaxContribution)}</td>
               <td>{formatPercentage(PAC_GAIN)}</td>
               <td>{formatPercentage(PAC_TAX)}</td>
-              <td>
-                {formatCurrency(
-                  getPacLiquidation(
-                    getFundTaxSaving(ral, annualMinContribution) +
-                      Math.max(annualVoluntaryContribution - annualMinVoluntaryContribution, 0)
-                  )
-                )}
-              </td>
-              <td>{formatCurrency(getFundLiquidation(FPN_NET_GAIN, annualMinContribution))}</td>
-              <td>{formatCurrency(fpnMinAndPacLiquidation)}</td>
+              <td>{formatCurrency(pacMaxLiquidation)}</td>
+              <td>{formatCurrency(fpnMinLiquidation)}</td>
+              <td>{formatCurrency(fpnMinAndPacMaxLiquidation)}</td>
             </tr>
             <tr
               className={
                 fpnZeroAndPacLiquidation >= fpnAndPacLiquidation &&
-                fpnZeroAndPacLiquidation >= fpnMaxAndPacLiquidation &&
-                fpnZeroAndPacLiquidation >= fpnMinAndPacLiquidation
+                fpnZeroAndPacLiquidation >= fpnMaxAndPacMinLiquidation &&
+                fpnZeroAndPacLiquidation >= fpnMinAndPacMaxLiquidation
                   ? "winner"
                   : ""
               }
@@ -610,7 +504,7 @@ const Tfr: React.FC = () => {
               <td>{formatPercentage(PAC_GAIN)}</td>
               <td>{formatPercentage(PAC_TAX)}</td>
               <td>{formatCurrency(getPacLiquidation(annualVoluntaryContribution))}</td>
-              <td>{formatCurrency(getFundLiquidation(FPN_NET_GAIN))}</td>
+              <td>{formatCurrency(fpnZeroLiquidation)}</td>
               <td>{formatCurrency(fpnZeroAndPacLiquidation)}</td>
             </tr>
           </tbody>
